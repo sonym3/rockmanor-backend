@@ -7,6 +7,9 @@ const nodemailer = require('nodemailer')
 const app = express()
 const PORT = process.env.PORT || 3001
 
+// Trust Render/proxy headers for rate limiting
+app.set('trust proxy', 1)
+
 // ── Middleware ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10kb' }))
 app.use(
@@ -147,16 +150,15 @@ app.post('/api/booking', limiter, async (req, res) => {
     // Log to console (always)
     console.log('\n📅 NEW BOOKING REQUEST:', JSON.stringify(data, null, 2))
 
-    // Send email notification to business
-    await sendEmail({
+    // Send emails (non-blocking — booking succeeds even if email fails)
+    sendEmail({
       from: `"3 Steps Bookings" <${process.env.EMAIL_USER}>`,
       to: process.env.BOOKING_RECIPIENT || process.env.EMAIL_USER,
       subject: `New Booking: ${data.firstName} ${data.lastName} — ${data.cleaningType} on ${data.date}`,
       html: formatBookingEmail(data),
-    })
+    }).catch((err) => console.error('Owner email failed:', err.message))
 
-    // Send confirmation email to customer
-    await sendEmail({
+    sendEmail({
       from: `"3 Steps Cleaning Service" <${process.env.EMAIL_USER}>`,
       to: data.email,
       subject: 'Your Booking Request Has Been Received — 3 Steps Cleaning',
@@ -177,7 +179,7 @@ app.post('/api/booking', limiter, async (req, res) => {
           </div>
         </div>
       `,
-    })
+    }).catch((err) => console.error('Customer email failed:', err.message))
 
     res.json({ success: true, message: 'Booking received successfully' })
   } catch (err) {
