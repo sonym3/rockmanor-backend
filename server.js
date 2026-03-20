@@ -41,7 +41,7 @@ async function sendEmail({ from, to, subject, html }) {
 function formatBookingEmail(data) {
   const {
     cleaningType, rooms, bathrooms, date, time, recurring,
-    specialRequests, street, unit, buzzer, city, postalCode,
+    details, specialRequests, street, unit, buzzer, city, postalCode,
     firstName, lastName, email, phone, estimatedTotal,
   } = data
 
@@ -69,6 +69,7 @@ function formatBookingEmail(data) {
 
         <h2 style="color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 24px;">Service Details</h2>
         <p><strong>Cleaning Type:</strong> ${cleaningType}</p>
+        ${details ? `<p><strong>Details:</strong> ${details}</p>` : ''}
         <p><strong>Rooms:</strong> ${rooms}</p>
         <p><strong>Bathrooms:</strong> ${bathrooms}</p>
         <p><strong>Date:</strong> ${date}</p>
@@ -104,7 +105,7 @@ app.get('/api/health', (req, res) => {
 app.post('/api/booking', limiter, async (req, res) => {
   try {
     const {
-      cleaningType, rooms, bathrooms, date, time, recurring,
+      cleaningType, rooms, bathrooms, details, date, time, recurring,
       specialRequests, street, unit, buzzer, city, postalCode,
       firstName, lastName, email, phone, estimatedTotal,
     } = req.body
@@ -128,6 +129,7 @@ app.post('/api/booking', limiter, async (req, res) => {
       date: sanitize(date),
       time: sanitize(time),
       recurring: sanitize(recurring),
+      details: sanitize(details || '').slice(0, 1000),
       specialRequests: sanitize(specialRequests).slice(0, 400),
       street: sanitize(street),
       unit: sanitize(unit),
