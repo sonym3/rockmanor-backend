@@ -2,7 +2,7 @@ require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const rateLimit = require('express-rate-limit')
-const { Resend } = require('resend')
+const nodemailer = require('nodemailer')
 const helmet = require('helmet')
 
 const app = express()
@@ -29,14 +29,20 @@ const limiter = rateLimit({
 })
 
 // ── Email Transport ─────────────────────────────────────────────────────────
-const resend = new Resend(process.env.RESEND_API_KEY)
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+})
 
 async function sendEmail({ from, to, subject, html }) {
-  if (!process.env.RESEND_API_KEY) {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.log('📧 Email not configured — would have sent:', subject)
     return
   }
-  await resend.emails.send({ from, to, subject, html })
+  await transporter.sendMail({ from, to, subject, html })
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -150,14 +156,14 @@ app.post('/api/booking', limiter, async (req, res) => {
 
     // Send emails (non-blocking — booking succeeds even if email fails)
     sendEmail({
-      from: 'onboarding@resend.dev',
+      from: `"3 Steps Bookings" <${process.env.EMAIL_USER}>`,
       to: process.env.BOOKING_RECIPIENT || process.env.EMAIL_USER,
       subject: `New Booking: ${data.firstName} ${data.lastName} — ${data.cleaningType} on ${data.date}`,
       html: formatBookingEmail(data),
     }).catch((err) => console.error('Owner email failed:', err.message))
 
     sendEmail({
-      from: 'onboarding@resend.dev',
+      from: `"3 Steps Cleaning Service" <${process.env.EMAIL_USER}>`,
       to: data.email,
       subject: 'Your Booking Request Has Been Received — 3 Steps Cleaning',
       html: `
@@ -204,7 +210,7 @@ app.post('/api/feedback', limiter, async (req, res) => {
     console.log('\n⭐ NEW FEEDBACK:', JSON.stringify(data, null, 2))
 
     await sendEmail({
-      from: 'onboarding@resend.dev',
+      from: `"3 Steps Feedback" <${process.env.EMAIL_USER}>`,
       to: process.env.BOOKING_RECIPIENT || process.env.EMAIL_USER,
       subject: `New Feedback (${data.rating}★) from ${data.name}`,
       html: `
