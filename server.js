@@ -105,6 +105,13 @@ function sanitize(str) {
   return str.replace(/[<>]/g, '').slice(0, 1000)
 }
 
+function validatePhoneNumber(phone) {
+  if (!phone || typeof phone !== 'string') return false
+  // Supports: 902-111-1111, (902) 111-1111, 9021111111, +1-902-111-1111, +1 (902) 111-1111
+  const phoneRegex = /^(\+1[-.\s]?)?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})$/
+  return phoneRegex.test(phone.trim())
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: '3 Steps Cleaning API' })
@@ -128,6 +135,10 @@ app.post('/api/booking', limiter, async (req, res) => {
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Invalid email address' })
+    }
+
+    if (!validatePhoneNumber(phone)) {
+      return res.status(400).json({ error: 'Invalid phone number. Please use format like 902-111-1111 or (902) 111-1111' })
     }
 
     const data = {
