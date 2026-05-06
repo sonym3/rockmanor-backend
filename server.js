@@ -107,7 +107,7 @@ function sanitize(str) {
 
 function validatePhoneNumber(phone) {
   if (!phone || typeof phone !== 'string') return false
-  // Supports: 902-111-1111, (902) 111-1111, 9021111111, +1-902-111-1111, +1 (902) 111-1111
+  // Supports: 902-789-6801, (902) 111-1111, 9027896801, +1-902-789-6801, +1 (902) 111-1111
   const phoneRegex = /^(\+1[-.\s]?)?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})$/
   return phoneRegex.test(phone.trim())
 }
@@ -138,7 +138,7 @@ app.post('/api/booking', limiter, async (req, res) => {
     }
 
     if (!validatePhoneNumber(phone)) {
-      return res.status(400).json({ error: 'Invalid phone number. Please use format like 902-111-1111 or (902) 111-1111' })
+      return res.status(400).json({ error: 'Invalid phone number. Please use format like 902-789-6801 or (902) 111-1111' })
     }
 
     const data = {
@@ -189,7 +189,7 @@ app.post('/api/booking', limiter, async (req, res) => {
             <p><strong>Date:</strong> ${data.date} at ${data.time}</p>
             <p><strong>Address:</strong> ${data.street}, ${data.city}</p>
             ${data.estimatedTotal != null ? `<p><strong>Estimated Total:</strong> $${data.estimatedTotal}</p>` : '<p><strong>Pricing:</strong> We\'ll provide a custom quote when we confirm your booking.</p>'}
-            <p style="margin-top: 24px;">Questions? Call us anytime at <strong><a href="tel:9021111111" style="color: #0d9488;">902-111-1111</a></strong></p>
+            <p style="margin-top: 24px;">Questions? Call us anytime at <strong><a href="tel:9027896801" style="color: #0d9488;">902-789-6801</a></strong></p>
             <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">3 Steps Cleaning Service — Halifax, NS</p>
           </div>
         </div>
@@ -199,7 +199,7 @@ app.post('/api/booking', limiter, async (req, res) => {
     res.json({ success: true, message: 'Booking received successfully' })
   } catch (err) {
     console.error('Booking error:', err)
-    res.status(500).json({ error: 'Internal server error. Please call 902-111-1111.' })
+    res.status(500).json({ error: 'Internal server error. Please call 902-789-6801.' })
   }
 })
 
