@@ -93,7 +93,7 @@ function formatBookingEmail(data) {
         </div>
 
         <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-          Submitted via 3stepscleaning.com booking form
+          Submitted via 3stepscleaning.ca booking form
         </p>
       </div>
     </div>
