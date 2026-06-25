@@ -2,7 +2,7 @@ require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const rateLimit = require('express-rate-limit')
-const nodemailer = require('nodemailer')
+const { Resend } = require('resend')
 const helmet = require('helmet')
 
 const app = express()
@@ -28,21 +28,50 @@ const limiter = rateLimit({
   message: { error: 'Too many requests. Please try again later.' },
 })
 
-// ── Email Transport ─────────────────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-})
+// ── Email (Resend) ────────────────────────────────────────────────────────────
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
+const MAIL_FROM = process.env.MAIL_FROM || '3 Steps Cleaning <onboarding@resend.dev>'
 
-async function sendEmail({ from, to, subject, html }) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.log('📧 Email not configured — would have sent:', subject)
+async function sendEmail({ to, subject, html, replyTo }) {
+  if (!resend) {
+    console.log('📧 Email not configured (set RESEND_API_KEY) — would have sent:', subject)
     return
   }
-  await transporter.sendMail({ from, to, subject, html })
+  if (!to) {
+    console.warn('📧 sendEmail called with no recipient — skipping:', subject)
+    return
+  }
+  const { error } = await resend.emails.send({
+    from: MAIL_FROM,
+    to,
+    subject,
+    html,
+    ...(replyTo ? { replyTo } : {}),
+  })
+  if (error) throw new Error(error.message || 'Resend send failed')
+}
+
+// ── Bot protection (Cloudflare Turnstile) ─────────────────────────────────────
+async function verifyTurnstile(token, ip) {
+  // No secret configured (e.g. local dev) → skip the check so the form still works.
+  if (!process.env.TURNSTILE_SECRET) return true
+  if (!token) return false
+  try {
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        secret: process.env.TURNSTILE_SECRET,
+        response: token,
+        ...(ip ? { remoteip: ip } : {}),
+      }),
+    })
+    const data = await resp.json()
+    return data.success === true
+  } catch (err) {
+    console.error('Turnstile verify error:', err.message)
+    return false
+  }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -119,6 +148,12 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/booking', limiter, async (req, res) => {
   try {
+    // Bot protection — reject if the Turnstile challenge wasn't passed
+    const humanVerified = await verifyTurnstile(req.body.turnstileToken, req.ip)
+    if (!humanVerified) {
+      return res.status(400).json({ error: 'Verification failed. Please complete the challenge and try again.' })
+    }
+
     const {
       cleaningType, rooms, bathrooms, details, date, time, recurring,
       specialRequests, street, unit, buzzer, city, postalCode,
@@ -166,16 +201,18 @@ app.post('/api/booking', limiter, async (req, res) => {
     console.log('\n📅 NEW BOOKING REQUEST:', JSON.stringify(data, null, 2))
 
     // Send emails (non-blocking — booking succeeds even if email fails)
+    // Owner notification: reply-to is the customer so the owner can reply directly.
     sendEmail({
-      from: `"3 Steps Bookings" <${process.env.EMAIL_USER}>`,
-      to: process.env.BOOKING_RECIPIENT || process.env.EMAIL_USER,
+      to: process.env.BOOKING_RECIPIENT,
+      replyTo: data.email,
       subject: `New Booking: ${data.firstName} ${data.lastName} — ${data.cleaningType} on ${data.date}`,
       html: formatBookingEmail(data),
     }).catch((err) => console.error('Owner email failed:', err.message))
 
+    // Customer confirmation: reply-to routes back to the business inbox (via Cloudflare Email Routing).
     sendEmail({
-      from: `"3 Steps Cleaning Service" <${process.env.EMAIL_USER}>`,
       to: data.email,
+      replyTo: process.env.REPLY_TO || process.env.BOOKING_RECIPIENT,
       subject: 'Your Booking Request Has Been Received — 3 Steps Cleaning',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; color: #1e293b;">
@@ -221,8 +258,8 @@ app.post('/api/feedback', limiter, async (req, res) => {
     console.log('\n⭐ NEW FEEDBACK:', JSON.stringify(data, null, 2))
 
     await sendEmail({
-      from: `"3 Steps Feedback" <${process.env.EMAIL_USER}>`,
-      to: process.env.BOOKING_RECIPIENT || process.env.EMAIL_USER,
+      to: process.env.BOOKING_RECIPIENT,
+      replyTo: data.email || undefined,
       subject: `New Feedback (${data.rating}★) from ${data.name}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto;">
@@ -245,5 +282,6 @@ app.post('/api/feedback', limiter, async (req, res) => {
 // ── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🧹 3 Steps API running on http://localhost:${PORT}`)
-  console.log(`   Email configured: ${!!(process.env.EMAIL_USER && process.env.EMAIL_PASS)}\n`)
+  console.log(`   Email (Resend): ${resend ? 'configured' : 'NOT configured'}`)
+  console.log(`   Turnstile: ${process.env.TURNSTILE_SECRET ? 'enabled' : 'disabled (no secret)'}\n`)
 })
